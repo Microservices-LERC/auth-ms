@@ -1,0 +1,46 @@
+# Dependencias
+
+FROM node:21-alpine3.19 as deps
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+COPY yarn.lock ./
+
+RUN yarn install
+
+# Builder - Construye la app
+
+FROM node:21-alpine3.19 as build
+
+WORKDIR /usr/src/app
+
+# Copiar de deps, los modulos de node
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+
+# Copiar el resto de la app
+COPY . .
+
+RUN yarn build
+
+RUN yarn install --production --frozen-lockfile && yarn cache clean
+
+RUN npx prisma generate
+
+# Crear la imagen final de docker
+
+FROM node:21-alpine3.19 as production
+
+WORKDIR /usr/src/app
+
+COPY --from=build /usr/src/app/node_modules ./node_modules
+
+COPY --from=build /usr/src/app/dist ./dist
+
+ENV NODE_ENV=production
+
+USER node
+
+EXPOSE 3000
+
+CMD [ "node", "dist/main.js" ]
